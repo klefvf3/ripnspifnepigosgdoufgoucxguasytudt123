@@ -146,6 +146,16 @@ body {
   cursor: not-allowed;
 }
 
+.btn-submit.btn-cooldown {
+  background: #1c1c1c;
+  color: #a3a3a3;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  opacity: 1 !important;
+}
+
 /* Spinner */
 .btn-spinner {
   width: 16px;
