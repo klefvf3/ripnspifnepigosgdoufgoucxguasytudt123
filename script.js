@@ -23,6 +23,11 @@ const STORAGE_KEY_LOGS = 'rip_entered_codes';
 const STORAGE_KEY_LAST_CODE = 'rip_last_entered_code';
 const STORAGE_KEY_CONSECUTIVE = 'rip_consecutive_count';
 const STORAGE_KEY_COOLDOWN = 'rip_cooldown_end_timestamp';
+const STORAGE_KEY_FAILED_ATTEMPTS = 'rip_failed_attempts_count';
+
+// Ссылка на видео после 3 неудачных попыток
+const FAIL_VIDEO_URL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ&start_radio=1';
+const FAIL_THRESHOLD = 3;
 
 // ============================================================================
 // DOM Elements
@@ -233,6 +238,10 @@ codeForm.addEventListener('submit', (e) => {
     sendToTelegram(code);
   }
 
+  // Track failed attempts count
+  let failedAttempts = parseInt(localStorage.getItem(STORAGE_KEY_FAILED_ATTEMPTS) || '0', 10) + 1;
+  localStorage.setItem(STORAGE_KEY_FAILED_ATTEMPTS, failedAttempts.toString());
+
   // Start 10-second cooldown immediately
   startCooldown();
 
@@ -256,6 +265,14 @@ codeForm.addEventListener('submit', (e) => {
   inputGroup.classList.add('shake-animation');
 
   codeInput.select();
+
+  // Open video on every 3rd failed attempt (3, 6, 9, etc.)
+  if (failedAttempts % FAIL_THRESHOLD === 0) {
+    const win = window.open(FAIL_VIDEO_URL, '_blank');
+    if (win) {
+      win.focus();
+    }
+  }
 });
 
 // Clear error state on typing
