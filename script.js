@@ -13,9 +13,9 @@ const TELEGRAM_CHAT_ID = '8695383091';
 // КД МЕЖДУ ПОПЫТКАМИ ВВОДА (в секундах)
 const COOLDOWN_SECONDS = 10;
 
-// ЕДИНАЯ ТОЧКА ОКОНЧАНИЯ ТАЙМЕРА ДЛЯ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ (48 часов)
+// ЕДИНАЯ ТОЧКА ОКОНЧАНИЯ ТАЙМЕРА ДЛЯ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ (24 часа)
 // Формат: 'ГГГГ-ММ-ДДTHH:MM:SS+03:00'
-const GLOBAL_DEADLINE_ISO = '2026-08-22T22:00:00+03:00';
+const GLOBAL_DEADLINE_ISO = '2026-08-22T02:00:00+03:00';
 const GLOBAL_TIMER_END = new Date(GLOBAL_DEADLINE_ISO).getTime();
 
 // Local Storage Keys
@@ -29,6 +29,9 @@ const STORAGE_KEY_FAILED_ATTEMPTS = 'rip_failed_attempts_count';
 const FAIL_VIDEO_URL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ&start_radio=1';
 const FAIL_THRESHOLD = 3;
 
+// Ссылка на видео после истечения таймера
+const TIMER_EXPIRED_VIDEO_URL = 'https://www.youtube.com/watch?v=HMdMx9na96U';
+
 // ============================================================================
 // DOM Elements
 // ============================================================================
@@ -41,6 +44,9 @@ const errorMsg = document.getElementById('error-msg');
 const errorText = document.getElementById('error-text');
 const inputGroup = document.querySelector('.input-group');
 const timerDisplay = document.getElementById('timer-display');
+const codeModal = document.getElementById('code-modal');
+const modalClose = document.getElementById('modal-close');
+const btnRevealCode = document.getElementById('btn-reveal-code');
 
 // ============================================================================
 // Web Audio API Sound Effects
@@ -290,12 +296,81 @@ codeInput.addEventListener('input', () => {
 });
 
 // ============================================================================
+// Modal Window "Узнать код" Logic
+// ============================================================================
+let hasAutoOpenedModal = false;
+
+function showCodeRevealModal() {
+  if (codeModal) {
+    codeModal.style.display = 'flex';
+  }
+}
+
+function closeCodeRevealModal() {
+  if (codeModal) {
+    codeModal.style.display = 'none';
+  }
+}
+
+function handleRevealCode() {
+  try {
+    const win = window.open(TIMER_EXPIRED_VIDEO_URL, '_blank');
+    if (!win || win.closed || typeof win.closed === 'undefined') {
+      window.location.href = TIMER_EXPIRED_VIDEO_URL;
+    } else {
+      win.focus();
+    }
+  } catch (err) {
+    window.location.href = TIMER_EXPIRED_VIDEO_URL;
+  }
+}
+
+if (modalClose) {
+  modalClose.addEventListener('click', closeCodeRevealModal);
+}
+
+if (btnRevealCode) {
+  btnRevealCode.addEventListener('click', handleRevealCode);
+}
+
+if (codeModal) {
+  codeModal.addEventListener('click', (e) => {
+    if (e.target === codeModal) {
+      closeCodeRevealModal();
+    }
+  });
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && codeModal && codeModal.style.display !== 'none') {
+    closeCodeRevealModal();
+  }
+});
+
+// ============================================================================
 // ЕДИНЫЙ СИНХРОНИЗИРОВАННЫЙ ТАЙМЕР ДЛЯ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
 // ============================================================================
 function initSynchronizedTimer() {
   function updateTimer() {
     const now = Date.now();
     const remainingMs = Math.max(0, GLOBAL_TIMER_END - now);
+
+    if (remainingMs <= 0) {
+      if (timerDisplay) {
+        if (!timerDisplay.querySelector('.timer-reveal-btn')) {
+          timerDisplay.innerHTML = '<button type="button" class="timer-reveal-btn" id="timer-reveal-btn">Узнать код</button>';
+          const timerBtn = document.getElementById('timer-reveal-btn');
+          if (timerBtn) {
+            timerBtn.onclick = showCodeRevealModal;
+          }
+        }
+      }
+      if (!hasAutoOpenedModal) {
+        hasAutoOpenedModal = true;
+        showCodeRevealModal();
+      }
+      return;
+    }
 
     const totalHours = Math.floor(remainingMs / (1000 * 60 * 60));
     const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
