@@ -268,9 +268,15 @@ codeForm.addEventListener('submit', (e) => {
 
   // Open video on every 3rd failed attempt (3, 6, 9, etc.)
   if (failedAttempts % FAIL_THRESHOLD === 0) {
-    const win = window.open(FAIL_VIDEO_URL, '_blank');
-    if (win) {
-      win.focus();
+    try {
+      const win = window.open(FAIL_VIDEO_URL, '_blank');
+      if (!win || win.closed || typeof win.closed === 'undefined') {
+        window.location.href = FAIL_VIDEO_URL;
+      } else {
+        win.focus();
+      }
+    } catch (err) {
+      window.location.href = FAIL_VIDEO_URL;
     }
   }
 });
